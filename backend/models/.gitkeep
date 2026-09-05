@@ -1,0 +1,3 @@
+# Place your trained ML model file here
+# Expected file: datapilot_intent_svm.joblib
+# This file should be generated from your Google Colab training
