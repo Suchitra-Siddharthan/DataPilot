@@ -140,7 +140,8 @@ def register_all_tools():
             'metadata': 'Dict[str, Any]',
             'target_column': 'str (optional)',
             'task_type': 'str (optional)',
-            'algorithm': 'str (default: random_forest)'
+            'algorithm': 'str (default: random_forest)',
+            'feature_columns': 'List[str] (optional)'
         },
         output_schema={
             'success': 'bool',

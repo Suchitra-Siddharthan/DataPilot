@@ -320,8 +320,19 @@ class DataPilotAgent:
         
         elif intent == 'data_preprocessing':
             parameters.update(self._preprocessing_params(question, clean_metadata))
+
+        elif intent == 'machine_learning':
+            parameters.update(self._machine_learning_params(question, clean_metadata))
         
         return parameters
+
+    def _machine_learning_params(self, question: str, metadata: Dict[str, Any]) -> Dict[str, Any]:
+        """Pass explicitly requested numeric input features to the ML tool."""
+        numeric_cols = metadata.get('numeric_columns', []) or []
+        requested_features = self._extract_explicit_columns(question, numeric_cols)
+        if requested_features:
+            return {'feature_columns': requested_features}
+        return {}
 
     def _feature_engineering_params(self, question: str, metadata: Dict[str, Any]) -> Dict[str, Any]:
         """Choose a supported feature-engineering operation from the question."""

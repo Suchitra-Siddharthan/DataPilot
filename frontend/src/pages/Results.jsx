@@ -61,6 +61,20 @@ const Results = () => {
     }
   };
 
+  const getProcessedDataset = () => {
+    const candidates = ['processed_dataset','modified_dataset','updated_dataset','dataset','result_dataset'];
+    for (const key of candidates) {
+      if (Array.isArray(result[key]) && result[key].length > 0) return result[key];
+    }
+    return null;
+  };
+
+  const getPredictionDataset = () => (
+    Array.isArray(result?.prediction_dataset) && result.prediction_dataset.length > 0
+      ? result.prediction_dataset
+      : null
+  );
+
   const valueToHeatColor = (v) => {
     // v expected in [-1,1]
     const clamp = Math.max(-1, Math.min(1, Number(v) || 0));
@@ -204,29 +218,62 @@ const Results = () => {
               </div>
             )}
 
-            {/* Download processed dataset when backend returned an actual dataset object */}
-            {(() => {
-              const candidates = ['processed_dataset','modified_dataset','updated_dataset','dataset','result_dataset'];
-              for (const key of candidates) {
-                if (result[key]) {
-                  const ds = result[key];
-                  // simple check for array-of-objects or object with rows
-                  if (Array.isArray(ds) && ds.length > 0) {
-                    return (
-                      <div className="flex items-center space-x-3">
-                        <button
-                          onClick={() => downloadJsonAsCsv(ds, 'processed_dataset.csv')}
-                          className="px-4 py-2 bg-primary-600 text-white rounded-lg"
-                        >
-                          Download Processed Dataset
-                        </button>
-                        <span className="text-sm text-gray-500">Backend returned a processed dataset</span>
+            {result.operation === 'classification' || result.operation === 'regression' ? (
+              <>
+                {result.target_column && (
+                  <div className="p-3 bg-gray-50 rounded-lg">
+                    <span className="font-medium text-gray-700">Target Column: </span>
+                    <span className="text-gray-800">{result.target_column}</span>
+                  </div>
+                )}
+                {getPredictionDataset() && (
+                  <div className="space-y-3">
+                    <button
+                      onClick={() => downloadJsonAsCsv(getPredictionDataset(), 'predictions.csv')}
+                      className="px-4 py-2 bg-primary-600 text-white rounded-lg"
+                    >
+                      Download Predictions
+                    </button>
+                    <div>
+                      <h4 className="font-medium text-gray-700 mb-2">Prediction Results</h4>
+                      <div className="overflow-auto">
+                        <table className="min-w-full text-sm">
+                          <thead>
+                            <tr className="text-left text-gray-600">
+                              <th className="px-2 py-1">Row</th>
+                              <th className="px-2 py-1">Predicted Value</th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {getPredictionDataset().map((row, idx) => (
+                              <tr key={idx} className="bg-gray-50 even:bg-white">
+                                <td className="px-2 py-2">{idx + 1}</td>
+                                <td className="px-2 py-2 font-semibold">{String(row.prediction)}</td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
                       </div>
-                    );
-                  }
-                }
-              }
-              return null;
+                    </div>
+                  </div>
+                )}
+              </>
+            ) : null}
+
+            {/* Download processed dataset when backend returned an actual dataset object */}
+            {result.operation !== 'feature_engineering' && (() => {
+              const ds = getProcessedDataset();
+              return ds ? (
+                <div className="flex items-center space-x-3">
+                  <button
+                    onClick={() => downloadJsonAsCsv(ds, 'processed_dataset.csv')}
+                    className="px-4 py-2 bg-primary-600 text-white rounded-lg"
+                  >
+                    Download Processed Dataset
+                  </button>
+                  <span className="text-sm text-gray-500">Backend returned a processed dataset</span>
+                </div>
+              ) : null;
             })()}
             
             {/* Summary statistics */}
@@ -404,6 +451,18 @@ const Results = () => {
               <div className="p-3 bg-gray-50 rounded-lg">
                 <span className="font-medium text-gray-700">R²: </span>
                 <span className="text-gray-800">{Number(result.r2_score).toFixed(3)}</span>
+              </div>
+            )}
+
+            {result.operation === 'feature_engineering' && getProcessedDataset() && (
+              <div className="flex items-center space-x-3">
+                <button
+                  onClick={() => downloadJsonAsCsv(getProcessedDataset(), 'processed_dataset.csv')}
+                  className="px-4 py-2 bg-primary-600 text-white rounded-lg"
+                >
+                  Download Processed Dataset
+                </button>
+                <span className="text-sm text-gray-500">Backend returned a processed dataset</span>
               </div>
             )}
 

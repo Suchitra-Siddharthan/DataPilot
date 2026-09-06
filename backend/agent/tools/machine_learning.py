@@ -9,7 +9,8 @@ from sklearn.preprocessing import LabelEncoder
 
 def machine_learning(dataset: pd.DataFrame, metadata: Dict[str, Any], 
                     target_column: str = None, task_type: str = None,
-                    algorithm: str = 'random_forest') -> Dict[str, Any]:
+                    algorithm: str = 'random_forest',
+                    feature_columns: List[str] = None) -> Dict[str, Any]:
     """
     Perform machine learning analysis.
     Automatically detects task type (classification/regression) if not specified.
@@ -31,7 +32,9 @@ def machine_learning(dataset: pd.DataFrame, metadata: Dict[str, Any],
             return {'success': False, 'error': f'Target column {target_column} not found in dataset'}
         
         # Prepare data
-        X, y, feature_columns = _prepare_data(dataset, target_column)
+        X, y, feature_columns, target_encoder = _prepare_data(
+            dataset, target_column, feature_columns
+        )
         
         if X is None or y is None:
             return {'success': False, 'error': 'Failed to prepare data for machine learning'}
@@ -48,17 +51,24 @@ def machine_learning(dataset: pd.DataFrame, metadata: Dict[str, Any],
         # Train model based on task type and algorithm
         if task_type == 'classification':
             result = _train_classification_model(
-                X_train, X_test, y_train, y_test, algorithm, feature_columns
+                X, y, X_train, X_test, y_train, y_test, algorithm,
+                feature_columns, target_encoder
             )
         else:
             result = _train_regression_model(
-                X_train, X_test, y_train, y_test, algorithm, feature_columns
+                X, y, X_train, X_test, y_train, y_test, algorithm,
+                feature_columns
             )
         
         result['target_column'] = target_column
         result['task_type'] = task_type
         result['algorithm'] = algorithm
         result['feature_columns'] = feature_columns
+        prediction_dataset = dataset.copy()
+        prediction_dataset['prediction'] = result['predictions']
+        result['prediction_dataset'] = prediction_dataset.where(
+            pd.notnull(prediction_dataset), None
+        ).to_dict(orient='records')
         
         return result
         
@@ -116,11 +126,14 @@ def _detect_task_type(target: pd.Series) -> str:
         return 'classification'
 
 
-def _prepare_data(dataset: pd.DataFrame, target_column: str) -> tuple:
+def _prepare_data(dataset: pd.DataFrame, target_column: str,
+                  requested_features: List[str] = None) -> tuple:
     """Prepare features and target for ML"""
     # Drop target column from features
     feature_columns = [col for col in dataset.columns if col != target_column]
-    
+    if requested_features:
+        feature_columns = [col for col in requested_features if col in feature_columns]
+
     # Select only numeric features for simplicity
     numeric_features = dataset[feature_columns].select_dtypes(include=[np.number]).columns.tolist()
     
@@ -131,15 +144,17 @@ def _prepare_data(dataset: pd.DataFrame, target_column: str) -> tuple:
     y = dataset[target_column].fillna(dataset[target_column].mode()[0] if dataset[target_column].dtype == 'object' else 0)
     
     # Encode target if categorical
-    if y.dtype == 'object':
-        le = LabelEncoder()
-        y = le.fit_transform(y.astype(str))
+    target_encoder = None
+    if not pd.api.types.is_numeric_dtype(y):
+        target_encoder = LabelEncoder()
+        y = target_encoder.fit_transform(y.astype(str))
     
-    return X, y, numeric_features
+    return X, y, numeric_features, target_encoder
 
 
-def _train_classification_model(X_train, X_test, y_train, y_test, algorithm: str, 
-                               feature_columns: List[str]) -> Dict[str, Any]:
+def _train_classification_model(X, y, X_train, X_test, y_train, y_test,
+                               algorithm: str, feature_columns: List[str],
+                               target_encoder: Optional[LabelEncoder]) -> Dict[str, Any]:
     """Train classification model"""
     if algorithm == 'logistic_regression':
         model = LogisticRegression(max_iter=1000, random_state=42)
@@ -157,6 +172,12 @@ def _train_classification_model(X_train, X_test, y_train, y_test, algorithm: str
     if hasattr(model, 'feature_importances_'):
         for feat, imp in zip(feature_columns, model.feature_importances_):
             feature_importance[feat] = float(imp)
+
+    model.fit(X, y)
+    predictions = model.predict(X)
+    if target_encoder is not None:
+        predictions = target_encoder.inverse_transform(predictions.astype(int))
+    predictions = [str(value) if target_encoder is not None else value for value in predictions]
     
     return {
         'success': True,
@@ -164,12 +185,13 @@ def _train_classification_model(X_train, X_test, y_train, y_test, algorithm: str
         'model_type': algorithm,
         'accuracy': float(accuracy),
         'feature_importance': feature_importance,
+        'predictions': predictions,
         'test_samples': len(y_test),
         'training_samples': len(y_train)
     }
 
 
-def _train_regression_model(X_train, X_test, y_train, y_test, algorithm: str,
+def _train_regression_model(X, y, X_train, X_test, y_train, y_test, algorithm: str,
                             feature_columns: List[str]) -> Dict[str, Any]:
     """Train regression model"""
     if algorithm == 'linear_regression':
@@ -192,6 +214,9 @@ def _train_regression_model(X_train, X_test, y_train, y_test, algorithm: str,
     elif hasattr(model, 'coef_'):
         for feat, coef in zip(feature_columns, model.coef_):
             feature_importance[feat] = float(coef)
+
+    model.fit(X, y)
+    predictions = model.predict(X)
     
     return {
         'success': True,
@@ -200,6 +225,7 @@ def _train_regression_model(X_train, X_test, y_train, y_test, algorithm: str,
         'mse': float(mse),
         'r2_score': float(r2),
         'feature_importance': feature_importance,
+        'predictions': [float(value) for value in predictions],
         'test_samples': len(y_test),
         'training_samples': len(y_train)
     }

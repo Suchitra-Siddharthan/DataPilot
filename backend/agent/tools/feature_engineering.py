@@ -117,7 +117,10 @@ def feature_engineering(dataset: pd.DataFrame, metadata: Dict[str, Any],
             'operation': 'feature_engineering',
             'transformations': transformations,
             'new_columns': [t.split("'")[1] for t in transformations if "'" in t],
-            'dataset_shape': result_dataset.shape
+            'dataset_shape': result_dataset.shape,
+            'processed_dataset': result_dataset.where(
+                pd.notnull(result_dataset), None
+            ).to_dict(orient='records')
         }
         
     except Exception as e:
